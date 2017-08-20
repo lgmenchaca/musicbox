@@ -10,3 +10,4 @@ sudo pip install git+git://github.com/vishnubob/python-midi.git
 
 [MIDI player]:
 brew install timidity
+usage: timidity <midi-file>
