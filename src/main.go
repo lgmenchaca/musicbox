@@ -8,19 +8,31 @@ import (
 	"bufio"
 	"strings"
 	"strconv"
+	"flag"
 )
 
 func main() {
 	argCount := len(os.Args)
 
-	if argCount > 2 {
+	if argCount > 3 {
 		appName := os.Args[0]
-		fmt.Printf("usage: %s [filename]\n", appName)
+		fmt.Printf("usage: %s [-speed=N] [filename]\n", appName)
 		return
 	}
+	var speedPtr *float64 = nil
+	var speed float64 = 1.0
 
-	if argCount == 1 {
-		playFile(os.Stdin)
+	if argCount >= 2 {
+		speedPtr = flag.Float64("speed", 1, "the reproduction speed")
+		flag.Parse()
+
+		if speedPtr != nil {
+			speed = *speedPtr
+		}
+	}
+
+	if argCount == 1 || (argCount == 2 && speedPtr != nil) {
+		playFile(os.Stdin, speed)
 	} else {
 		f, err := os.Open(os.Args[1])
 		
@@ -28,11 +40,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 		defer f.Close()
-		playFile(f)
+		playFile(f, speed)
 	}
 }
 
-func playFile(file *os.File) {
+func playFile(file *os.File, speed float64) {
 	input := bufio.NewScanner(file)
 	lastStep := 0
 	
@@ -62,7 +74,7 @@ func playFile(file *os.File) {
 				return
 			}
 		}
-		delay := step * 10
+		delay := int(float64(step * 10) / speed)
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 		lastStep = step
 
@@ -90,7 +102,7 @@ func playFile(file *os.File) {
 
 func play(pin int) {
 	// TODO (lgmenchaca): embed resources in the final executable
-	file := fmt.Sprintf("./resources/pin_%d.mp3", pin + 1)
+	file := fmt.Sprintf("./resources/pin_%d.wav", pin + 1)
 
 	// TODO (lgmenchaca): use an audio library instead of relying on the OS
 	_, err := exec.Command("afplay", file).Output()
