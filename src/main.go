@@ -9,6 +9,7 @@ import (
 	"strings"
 	"strconv"
 	"flag"
+	"runtime"
 )
 
 func main() {
@@ -97,15 +98,21 @@ func playFile(file *os.File, speed float64) {
 		fmt.Println()
 	}
 	// TODO (lgmenchaca): detect when all goroutines are done
-	time.Sleep(time.Duration(100) * time.Millisecond)
+	time.Sleep(time.Duration(300) * time.Millisecond)
 }
 
 func play(pin int) {
 	// TODO (lgmenchaca): embed resources in the final executable
 	file := fmt.Sprintf("./resources/pin_%d.wav", pin + 1)
+	var err error
 
-	// TODO (lgmenchaca): use an audio library instead of relying on the OS
-	_, err := exec.Command("afplay", file).Output()
+	// TODO (lgmenchaca): use an audio library instead of relying on the OS.
+	// TODO (lgmenchaca): use compilation tags instead of detecting the OS at runtime.
+	if runtime.GOOS == "darwin" {
+	    _, err = exec.Command("afplay", file).Output()
+	} else if runtime.GOOS == "windows" {
+	    _, err = exec.Command("cmd", "/C", fmt.Sprintf("start /min ./sbin/afplay.vbs %s", file)).Output()
+	}
 
 	if err != nil {
 		fmt.Errorf("Error playing %s\n", file)
