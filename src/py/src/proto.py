@@ -23,15 +23,21 @@ class Hole(object):
     def __repr__(self):
         return "%d:%d" % (self.pos, self.pin)
 
-BPM = 120
+BPM = 240#120
 PPQ = pattern.resolution
 # tick duration in milliseconds
-tick_duration = float(60) * 1000 / BPM / PPQ
+tick_duration = 60.0 * 1000 / BPM / PPQ
 
 # units per tick
 units_per_tick = tick_duration / 10.0
 
-holes = [Hole(float(e.tick) * units_per_tick, max(min(e.pitch - 52, 14), 0)) for e in note_events]
+MIN_PITCH = 50 #21
+MAX_PITCH = 70 #108.0
+def map_pitch_to_mb(pitch):
+    mb = int((float(pitch) - MIN_PITCH) / (MAX_PITCH - MIN_PITCH) * 15)
+    return max(min(mb, 14), 0)
+
+holes = [Hole(float(e.tick) * units_per_tick, map_pitch_to_mb(e.pitch)) for e in note_events]
 
 with open("../../../songs/mary.mbx", 'w') as file:
     for hole in holes:
