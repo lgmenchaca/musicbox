@@ -1,8 +1,10 @@
 #!/usr/bin/python
 
 import midi
+import sys
 
-pattern = midi.read_midifile("../resources/mary.mid")
+# pattern = midi.read_midifile("../resources/mary.mid")
+pattern = midi.read_midifile(sys.stdin)
 
 note_events = None
 
@@ -23,7 +25,8 @@ class Hole(object):
     def __repr__(self):
         return "%d:%d" % (self.pos, self.pin)
 
-BPM = 240#120
+
+BPM = 120
 PPQ = pattern.resolution
 # tick duration in milliseconds
 tick_duration = 60.0 * 1000 / BPM / PPQ
@@ -31,11 +34,22 @@ tick_duration = 60.0 * 1000 / BPM / PPQ
 # units per tick
 units_per_tick = tick_duration / 10.0
 
-MIN_PITCH = 50 #21
-MAX_PITCH = 70 #108.0
+# This site has some interesting tables with MIDI - piano keys mappings:
+# http://www.sengpielaudio.com/calculator-notenames.htm
+PIN_00_FREQ = 146  # 439  # Hz
+PIN_14_FREQ = 1990  # Hz
+
+
+def pitch_frequency(pitch):
+    """ Converts MIDI pitch to frequency """
+    return 440 * 2 ** ((float(pitch) - 69.0) / 12.0)
+
+
 def map_pitch_to_mb(pitch):
-    mb = int((float(pitch) - MIN_PITCH) / (MAX_PITCH - MIN_PITCH) * 15)
-    return max(min(mb, 14), 0)
+    freq = pitch_frequency(pitch)
+    pin = int(round((float(freq) - PIN_00_FREQ) / (PIN_14_FREQ - PIN_00_FREQ) * 14))
+    return max(min(pin, 14), 0)
+
 
 holes = [Hole(float(e.tick) * units_per_tick, map_pitch_to_mb(e.pitch)) for e in note_events]
 
