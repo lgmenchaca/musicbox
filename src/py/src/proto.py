@@ -3,13 +3,34 @@
 import midi
 import sys
 
-# pattern = midi.read_midifile("../resources/mary.mid")
-pattern = midi.read_midifile(sys.stdin)
+"""
+  ** Notes taken from https://github.com/vishnubob/python-midi#Side_Note_What_is_a_MIDI_Tick **
 
-note_events = None
+  There are 27 different MIDI Events supported. In this example, three different MIDI events are created and added to the
+  MIDI Track:
+
+  The NoteOnEvent captures the start of note, like a piano player pushing down on a piano key. The tick is when this
+  event occurred, the pitch is the note value of the key pressed, and the velocity represents how hard the key was pressed.
+  The NoteOffEvent captures the end of note, just like a piano player removing her finger from a depressed piano key.
+
+  Once again, the tick is when this event occurred, the pitch is the note that is released, and the velocity has no real
+  world analogy and is usually ignored. NoteOnEvents with a velocity of zero are equivalent to NoteOffEvents.
+
+  The EndOfTrackEvent is a special event, and is used to indicate to MIDI sequencing software when the song ends. With
+  creating Patterns with multiple Tracks, you only need one EndOfTrack event for the entire song. Most MIDI software will
+  refuse to load a MIDI file if it does not contain an EndOfTrack event.
+"""
+
+pattern = midi.read_midifile(sys.stdin)
+note_events = []
+
+
+def event_filter(event):
+    return type(event) == midi.events.NoteOnEvent and event.channel == 0
+
 
 for track in pattern:
-    note_events = filter(lambda event: type(event) == midi.events.NoteOnEvent and event.channel == 0, track)
+    note_events = filter(event_filter, track)
     if len(note_events) > 0:
         break
 
@@ -37,7 +58,7 @@ units_per_tick = tick_duration / 10.0
 # This site has some interesting tables with MIDI - piano keys mappings:
 # http://www.sengpielaudio.com/calculator-notenames.htm
 PIN_00_FREQ = 146  # 439  # Hz
-PIN_14_FREQ = 1990  # Hz
+PIN_14_FREQ = 500  # 1990  # Hz
 
 
 def pitch_frequency(pitch):
@@ -51,7 +72,14 @@ def map_pitch_to_mb(pitch):
     return max(min(pin, 14), 0)
 
 
-holes = [Hole(float(e.tick) * units_per_tick, map_pitch_to_mb(e.pitch)) for e in note_events]
+holes = []
+tick = 0
+for event in note_events:
+    if event.velocity > 0:  # events with velocity 0 are equivalent to note off events
+        holes.append(Hole(pos=float(tick + event.tick) * units_per_tick, pin=map_pitch_to_mb(event.pitch)))
+        tick = 0
+    else:
+        tick += event.tick
 
 with open("../../../songs/mary.mbx", 'w') as file:
     for hole in holes:
