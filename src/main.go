@@ -110,6 +110,8 @@ func play(pin int) {
 	// TODO (lgmenchaca): use compilation tags instead of detecting the OS at runtime.
 	if runtime.GOOS == "darwin" {
 	    _, err = exec.Command("afplay", file).Output()
+	} else if runtime.GOOS == "linux" {
+	    _, err = exec.Command("aplay", "--quiet", file).Output()
 	} else if runtime.GOOS == "windows" {
 	    _, err = exec.Command("cmd", "/C", fmt.Sprintf("start /min ./sbin/afplay.vbs %s", file)).Output()
 	}
