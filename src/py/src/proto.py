@@ -26,16 +26,13 @@ note_events = []
 
 
 def event_filter(event):
-    return type(event) == midi.events.NoteOnEvent and event.channel == 0
+    return (type(event) == midi.events.NoteOnEvent and event.channel == 0) or (type(event) == midi.events.SetTempoEvent)
 
 
 for track in pattern:
     note_events = filter(event_filter, track)
     if len(note_events) > 0:
         break
-
-print pattern.__dict__
-print pattern
 
 
 class Hole(object):
@@ -47,13 +44,14 @@ class Hole(object):
         return "%d:%d" % (self.pos, self.pin)
 
 
-BPM = 120
-PPQ = pattern.resolution
-# tick duration in milliseconds
-tick_duration = 60.0 * 1000 / BPM / PPQ
+def compute_units_per_tick(bpm=120):
+    ppq = pattern.resolution
+    # tick duration in milliseconds
+    tick_duration = 60.0 * 1000 / bpm / ppq
 
-# units per tick
-units_per_tick = tick_duration / 10.0
+    # units per tick
+    return tick_duration / 10.0
+
 
 # This site has some interesting tables with MIDI - piano keys mappings:
 # http://www.sengpielaudio.com/calculator-notenames.htm
@@ -74,18 +72,23 @@ def map_pitch_to_mb(pitch):
 
 holes = []
 tick = 0
+units_per_tick = compute_units_per_tick()
 for event in note_events:
-    if event.velocity > 0:  # events with velocity 0 are equivalent to note off events
+    # events with velocity 0 are equivalent to note off events
+    if type(event) == midi.events.NoteOnEvent and event.velocity > 0:
         holes.append(Hole(pos=float(tick + event.tick) * units_per_tick, pin=map_pitch_to_mb(event.pitch)))
         tick = 0
     else:
         tick += event.tick
+        if type(event) == midi.events.SetTempoEvent:
+            units_per_tick = compute_units_per_tick(event.get_bpm())
 
 with open("../../../songs/mary.mbx", 'w') as file:
     for hole in holes:
         file.write("%s\n" % hole)
 
-print min([x.pin for x in holes])
+print pattern.__dict__
+print pattern
 
 print holes
 
