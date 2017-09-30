@@ -18,6 +18,7 @@ ffs = unlist(lapply(pins, FUN = function(pin){
     quantile(ff, 0.85)
 }));
 plot(ffs);
+lines(c(1,length(ffs)), ffs[c(1,length(ffs))]);
 
 wave = Reduce(bind, c(pins, rev(pins)))
 
