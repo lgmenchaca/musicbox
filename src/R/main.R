@@ -10,6 +10,7 @@ PINS = 1 : 15
 read_pin = function(pin) readWave(sprintf('../../resources/pin_%d.wav', pin))
 
 
+
 pins = sapply(PINS, FUN = read_pin)
 
 ffs = unlist(lapply(pins, FUN = function(pin){
@@ -20,5 +21,9 @@ ffs = unlist(lapply(pins, FUN = function(pin){
 plot(ffs);
 lines(c(1,length(ffs)), ffs[c(1,length(ffs))]);
 
-wave = Reduce(bind, c(pins, rev(pins)))
+#wave = Reduce(bind, c(pins, rev(pins)))
+
+wave = readMP3('~/Downloads/twinkle-twinkle.mp3');
+wave = channel(wave,'left')
+ff = FF(periodogram(wave, width = 1024))
 
