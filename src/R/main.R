@@ -55,25 +55,33 @@ if (PLOT) {
     lines(ff_dat$raw)
 }
 
+## smooth the centroids vector and detect the frequencies
 {
     cent = ff_dat$centroid
     cent[is.na(cent)] = SILENCE_FREQ
     ff_dat$centroid = cent;
-    # cent = runmed(cent, k = 9)
-    open = 1
-    prev_freq = cent[open]
-    # notes = matrix(numeric(0), ncol = 3, dimnames = list(NULL, c("open", "close", "freq")))
-    for (i in 2 : length(cent)) {
-        if (cent[i] != cent[i - 1]) {
-            if (i - open >= MIN_NOTE_PERIODS) {
+    #cent = runmed(cent, k = 9)
+    ## note this algorithm does not support multiple concurrent notes
+    ## todo: support concurrent/multi-channel detection and translation to music-box format
+    from = 1
+    prev_freq = median(cent[1 : MIN_NOTE_PERIODS])
+    for (i in 2 : (length(cent) + 1)) {
+        if (!identical(cent[i], cent[i - 1])) {
+            if (i - from >= MIN_NOTE_PERIODS) {
                 prev_freq = cent[i - 1]
             } else {
-                cent[open : (i - 1)] = prev_freq;
+                cent[from : (i - 1)] = prev_freq;
             }
-            open = i;
+            from = i;
         }
     }
     ff_dat$clean = cent;
+
+    # compute notes
+    diff_ind = which(diff(cent)!=0)
+    from = c(1, diff_ind + 1)
+    to = c(diff_ind, length(cent))
+    notes = cbind(from=from,to=to,freq=cent[from])
 }
 
 
@@ -81,4 +89,20 @@ PLOT = TRUE
 if (PLOT) {
     plot(ff_dat$centroid, pch = 16, col = ff_dat$cluster)
     lines(ff_dat$clean)
+}
+
+## make resulting wave
+{
+    sines = apply(notes, MARGIN = 1, FUN = function(ro){
+        freq = ro['freq']
+        duration = (ro['to'] - ro['from']) * 1024
+        if (freq > SILENCE_FREQ) {
+            sine(freq = freq, duration = duration)
+        } else{
+            names(duration) = NULL # bug in tuneR code
+            silence(duration = duration)
+        }
+    });
+    res = Reduce(bind, sines)
+    play(res)
 }
