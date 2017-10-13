@@ -45,58 +45,42 @@ compute_ff_dat = function(){
     ff_clusters[ff_mask] = cutree(dendogram, h = CUTREE_HEIGHT)
     ff_dat = data.frame(raw = ff, cluster = ff_clusters)
 
-
-
     ff_cent_agg = aggregate(formula = raw ~ cluster, data = ff_dat, FUN = median)
     ff_centroids = ff_cent_agg[order(ff_cent_agg$cluster), 2]
     ff_dat$centroid = round(ff_centroids[ff_dat$cluster])
 
-    # reorder cluster numbers based on centroids so the graphs look better
-    cluster_mapping = order(order(ff_centroids))
-    ff_dat$cluster = cluster_mapping[ff_dat$cluster]
 
     ## smooth the centroids vector and detect the frequencies
-    ## cent = ff_dat$centroid
-    ## cent[is.na(cent)] = SILENCE_FREQ
-    ## ff_dat$centroid = cent;
-    ## #cent = runmed(cent, k = 9)
-    ## ## note this algorithm does not support multiple concurrent notes
-    ## ## to-do: support concurrent/multi-channel detection and translation to music-box format
-    ## from = 1
-    ## prev_freq = median(cent[1 : MIN_NOTE_PERIODS])
-    ## for (i in 2 : (length(cent) + 1)) {
-    ##     if (! identical(cent[i], cent[i - 1])) {
-    ##         if (i - from >= MIN_NOTE_PERIODS) {
-    ##             prev_freq = cent[i - 1]
-    ##         } else {
-    ##             cent[from : (i - 1)] = prev_freq;
-    ##         }
-    ##         from = i;
-    ##     }
-    ## }
-    ## ff_dat$clean = cent;
+    cent = ff_dat$centroid
+    cent[is.na(cent)] = SILENCE_FREQ
+    ff_dat$centroid = cent;
+    #cent = runmed(cent, k = 9)
+    ## note this algorithm does not support multiple concurrent notes
+    ## todo: support concurrent/multi-channel detection and translation to music-box format
+    from = 1
+    prev_freq = median(cent[1 : MIN_NOTE_PERIODS])
+    for (i in 2 : (length(cent) + 1)) {
+        if (! identical(cent[i], cent[i - 1])) {
+            if (i - from >= MIN_NOTE_PERIODS) {
+                prev_freq = cent[i - 1]
+            } else {
+                cent[from : (i - 1)] = prev_freq;
+            }
+            from = i;
+        }
+    }
+    ff_dat$clean = cent;
 
     ff_dat
 }
 ff_dat = compute_ff_dat();
-
-# compute_channel_intervals = function(){
-K = max(ff_dat$cluster, na.rm = TRUE);
-channels = sapply(1 : K, FUN = function(cluster){
-    which(ff_dat$cluster == cluster);
-});
-# }
 
 PLOT = FALSE
 if (PLOT) {
     plot(ff_dat$centroid, pch = 16, col = ff_dat$cluster)
     lines(ff_dat$raw)
 }
-PLOT = TRUE
-if (PLOT) {
-    plot(ff_dat$centroid, pch = 16, col = ff_dat$cluster)
-    lines(ff_dat$clean)
-}
+
 generate_music_box_output = function(){
     cent = ff_dat$clean
     # compute notes
@@ -132,7 +116,7 @@ generate_music_box_output = function(){
                 # update the delay, subtracting the additional pin periods
                 delay = round(delay - (beats - 1) * PIN_DURATION_PERIODS);
             }
-        }else {
+        } else {
             # this is a silent note
             delay = delay + duration;
         }
@@ -142,23 +126,28 @@ generate_music_box_output = function(){
 
     notes
 }
-# notes = generate_music_box_output();
+notes = generate_music_box_output();
 
 
+PLOT = TRUE
+if (PLOT) {
+    plot(ff_dat$centroid, pch = 16, col = ff_dat$cluster)
+    lines(ff_dat$clean)
+}
 
 ## make resulting wave
-GO = FALSE
+GO = TRUE
 if (GO) {
     sines = apply(notes, MARGIN = 1, FUN = function(ro){
         freq = ro['freq']
         duration = (ro['to'] - ro['from']) * PERIODOGRAM_WINDOW
         if (freq > SILENCE_FREQ) {
             sine(freq = freq, duration = duration)
-        }else {
+        } else {
             names(duration) = NULL # bug in tuneR code
             silence(duration = duration)
         }
     });
     res = Reduce(bind, sines)
-    # play(res)
+    play(res)
 }
