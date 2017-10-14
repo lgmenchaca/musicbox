@@ -34,7 +34,7 @@ if (PLOT) {
 
 # wave = Reduce(bind, c(pins, rev(pins)))
 wave = readMP3('../../resources/mp3/twinkle.mp3');
-compute_ff_dat = function(){
+compute_ff_dat = function() {
     period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
     ff = FF(period)
 
@@ -83,7 +83,19 @@ ff_dat = compute_ff_dat();
 # compute_channel_intervals = function(){
 K = max(ff_dat$cluster, na.rm = TRUE);
 channels = sapply(1 : K, FUN = function(cluster){
-    which(ff_dat$cluster == cluster);
+    indexes = which(ff_dat$cluster == cluster);
+    if (length(indexes) > 1) {
+        dendogram = hclust(dist(indexes), method = 'single');
+        intervals = cutree(dendogram, h = 2);
+        dat = data.frame(indexes = indexes, intervals = intervals);
+
+        aggregate(formula = indexes ~ intervals, data = dat, FUN = function(idx){
+            range(idx)
+        });
+    } else {
+        NULL
+    }
+
 });
 # }
 
