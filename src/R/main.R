@@ -18,8 +18,10 @@ PIN_DURATION_PERIODS = 24000 / PERIODOGRAM_WINDOW # in periods
 MB_DELAY_MILLIS = 10
 PERIOD_TO_MB_DELAY = round(PERIODOGRAM_WINDOW / 44100 * 1000 / MB_DELAY_MILLIS)
 SAMPLE_RATE = 44100
+MIN_PEAK_SEP_PERIODS = 4
 
-wave = readMP3('../../resources/mp3/twinkle.mp3');
+# wave = readMP3('../../resources/mp3/twinkle.mp3');
+wave = mono(readMP3('../../resources/mp3/mary.mp3'));
 compute_ff_dat = function() {
     period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
     ff = FF(period)
@@ -65,7 +67,7 @@ compute_channel_intervals = function() {
 }
 channels = compute_channel_intervals();
 
-PLOT = TRUE
+PLOT = FALSE
 if (PLOT) {
     plot(ff_dat$centroid, pch = 1, col = ff_dat$cluster)
     #lines(ff_dat$raw)
@@ -81,7 +83,7 @@ if (PLOT) {
 }
 
 ## make resulting wave
-GO = TRUE
+GO = FALSE
 if (GO) {
     res_samples = rep(SILENCE_FREQ, length(wave@left))
     for(i in 1 : nrow(channels)) {
@@ -98,4 +100,30 @@ if (GO) {
     writeWave(res_wave, filename = '../../target/res.wav')
     writeWave(wave, filename = '../../target/orig.wav')
     # play(res_wave)
+}
+
+GO = TRUE
+if (GO) {
+    period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
+    deltas = diff(period@energy)
+    threshold = quantile(deltas, 0.95)
+    peaks = which(deltas > threshold);
+    peaks = peaks[-(which(diff(peaks) < MIN_PEAK_SEP_PERIODS) + 1)];
+
+    plot(wave, main="Wave peaks detection")
+    abline(v=peaks * PERIODOGRAM_WINDOW / SAMPLE_RATE,col=2)
+    legend(legend=c("wave","peaks"), x="bottomright", col=1:2, pch=16)
+
+    res_samples = rep(SILENCE_FREQ, length(wave@left))
+    for (peak in peaks) {
+        offset = peak * PERIODOGRAM_WINDOW # in samples
+        duration = 4 * PERIODOGRAM_WINDOW # in samples
+        mask = offset + (1 : duration);
+        res_samples[mask] = res_samples[mask] + sine(freq = 440, duration = duration)@left
+    }
+
+    res_wave = normalize(Wave(left = res_samples, samp.rate = SAMPLE_RATE, bit = 32, pcm = FALSE))
+    writeWave(res_wave, filename = '../../target/res.wav')
+    writeWave(wave, filename = '../../target/orig.wav')
+
 }
