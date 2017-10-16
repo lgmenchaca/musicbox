@@ -17,7 +17,6 @@ PERIODOGRAM_WINDOW = 1024 # number of samples in a periodogram window (i.o.w a p
 PIN_DURATION_PERIODS = 24000 / PERIODOGRAM_WINDOW # in periods
 MB_DELAY_MILLIS = 10
 NOTE_DURATION_MILLIS = 400
-# SAMPLE_RATE = 44100
 MIN_PEAK_SEP_PERIODS = 4
 
 wave = readMP3('../../resources/mp3/twinkle.mp3');
@@ -29,38 +28,45 @@ SAMPLES = length(wave@left)
 period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
 PERIODS = length(period@energy)
 
-deltas = diff(period@energy)
-threshold = qnorm(p = 0.85, mean = mean(deltas), sd = sd(deltas))
-peaks = which(deltas > threshold);
-peaks = peaks[- (which(diff(peaks) < MIN_PEAK_SEP_PERIODS) + 1)];
+compute_peaks = function(){
+    deltas = diff(period@energy)
+    threshold = qnorm(p = 0.85, mean = mean(deltas), sd = sd(deltas))
+    peaks = which(deltas > threshold);
+    peaks = peaks[- (which(diff(peaks) < MIN_PEAK_SEP_PERIODS) + 1)];
 
+    ## plot deltas
+    plot_deltas = function() {
+        plot(deltas, type = 'l')
+        abline(h = threshold, col = 2)
+    };
+    # plot_deltas();
 
-## plot deltas
-plot_deltas = function() {
-    plot(deltas, type = 'l')
-    abline(h = threshold, col = 2)
+    ## plot peaks
+    plot_peaks = function() {
+        plot(wave, main = "Wave peaks detection")
+        abline(v = peaks * PERIODOGRAM_WINDOW / SAMPLE_RATE, col = 2)
+        legend(legend = c("wave", "peaks"), x = "bottomright", col = 1 : 2, pch = 16)
+    };
+    # plot_peaks();
+
+    peaks;
 };
-# plot_deltas();
+peaks = compute_peaks();
 
-## plot peaks
-plot_peaks = function() {
-    plot(wave, main = "Wave peaks detection")
-    abline(v = peaks * PERIODOGRAM_WINDOW / SAMPLE_RATE, col = 2)
-    legend(legend = c("wave", "peaks"), x = "bottomright", col = 1 : 2, pch = 16)
+compute_notes = function() {
+    ## detect frequencies
+    ffs = FF(period)
+
+    from_period = peaks + 1
+    to_period = c(peaks[- 1], PERIODS)
+    freqs = mapply(from = from_period, to = to_period, function(from, to){
+        freq = median(ffs[from : to], na.rm = TRUE)
+    });
+    sample_peaks = peaks * PERIODOGRAM_WINDOW # in samples
+    notes = data.frame(offset = sample_peaks, freq = freqs)
+    notes;
 };
-plot_peaks();
-
-
-## detect frequency
-sample_peaks = peaks * PERIODOGRAM_WINDOW # in samples
-ffs = FF(period)
-
-from_period = peaks + 1
-to_period = c(peaks[- 1], PERIODS)
-freqs = mapply(from = from_period, to = to_period, function(from, to){
-    freq = median(ffs[from : to], na.rm = TRUE)
-});
-notes = data.frame(offset = sample_peaks, freq = freqs)
+notes = compute_notes();
 
 ## generate resulting wave
 res_samples = rep(SILENCE_FREQ, length(wave@left))
