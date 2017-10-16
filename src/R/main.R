@@ -7,16 +7,9 @@ rm(list = ls())
 
 library(tuneR);
 
-PINS = 15
-CLUSTERS = PINS
-CUTREE_FREQUENCY_HEIGHT = 20
-CUTREE_PERIOD_HEIGHT = 5
 SILENCE_FREQ = 0
-MIN_NOTE_PERIODS = 10
 PERIODOGRAM_WINDOW = 1024 # number of samples in a periodogram window (i.o.w a period)
-PIN_DURATION_PERIODS = 24000 / PERIODOGRAM_WINDOW # in periods
-MB_DELAY_MILLIS = 10
-NOTE_DURATION_MILLIS = 400
+NOTE_DURATION_MILLIS = 800
 MIN_PEAK_SEP_PERIODS = 4
 
 wave = readMP3('../../resources/mp3/twinkle.mp3');
@@ -25,13 +18,17 @@ SAMPLE_RATE = wave@samp.rate
 NOTE_DURATION_SAMPLES = round(NOTE_DURATION_MILLIS / 1000 * SAMPLE_RATE)
 SAMPLES = length(wave@left)
 
+## todo: review, consider alternatives. Taking periodogram of an arbitrary window size.
+## There is some inherent precission loss when taking these windows.
 period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
 PERIODS = length(period@energy)
 
 compute_peaks = function(){
     deltas = diff(period@energy)
+    ## todo: review: using an arbitrary threshold of percentile 85
     threshold = qnorm(p = 0.85, mean = mean(deltas), sd = sd(deltas))
     peaks = which(deltas > threshold);
+    ## todo: review: cleaning false peaks base on min inter-peak distance
     peaks = peaks[- (which(diff(peaks) < MIN_PEAK_SEP_PERIODS) + 1)];
 
     ## plot deltas
@@ -60,11 +57,11 @@ compute_notes = function() {
     from_period = peaks + 1
     to_period = c(peaks[- 1], PERIODS)
     freqs = mapply(from = from_period, to = to_period, function(from, to){
+        # todo: refine, consider alternatives. just an initial approach: getting the median of the fundamental frequencies
         freq = median(ffs[from : to], na.rm = TRUE)
     });
     sample_peaks = peaks * PERIODOGRAM_WINDOW # in samples
-    notes = data.frame(offset = sample_peaks, freq = freqs)
-    notes;
+    data.frame(offset = sample_peaks, freq = freqs)
 };
 notes = compute_notes();
 
@@ -78,6 +75,7 @@ for (i in 1 : nrow(notes)) {
         duration = NOTE_DURATION_SAMPLES;
         mask = offset + 1 : duration;
         amplitude = exp(- seq(from = 0, to = 5, length = duration))
+        ## todo: review initial approach: using an exponential decay amplitude with arbitrary (constant) duration
         res_samples[mask] = res_samples[mask] + amplitude * sine(freq = freq, duration = duration, samp.rate = SAMPLE_RATE)@left;
     }
 }
