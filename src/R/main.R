@@ -149,5 +149,13 @@ if (GO) {
         }
     });
     res = Reduce(bind, sines)
-    # play(res)
+    # writeWave(res, "output.wav")
+
+    # play result
+    player = NULL
+
+    if (Sys.info()[["sysname"]] == "Darwin") {
+    	player = "afplay"
+    }
+    play(res, player)
 }
