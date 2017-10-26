@@ -3,159 +3,91 @@
 # Created by: Oscar.Borrego
 # Created on: 9/29/2017
 
+rm(list = ls())
+
 library(tuneR);
 
-PINS = 15
-CLUSTERS = PINS
-# CUTREE_HEIGHT = 40^2
-CUTREE_HEIGHT = 20
 SILENCE_FREQ = 0
-MIN_NOTE_PERIODS = 10
 PERIODOGRAM_WINDOW = 1024 # number of samples in a periodogram window (i.o.w a period)
-PIN_DURATION_PERIODS = 24000 / PERIODOGRAM_WINDOW # in periods
-MB_DELAY_MILLIS = 10
-PERIOD_TO_MB_DELAY = round(PERIODOGRAM_WINDOW / 44100 * 1000 / MB_DELAY_MILLIS)
+NOTE_DURATION_MILLIS = 800
+MIN_PEAK_SEP_PERIODS = 4
 
-read_pin = function(pin) readWave(sprintf('../../resources/pin_%d.wav', pin))
-
-pins = sapply(1 : PINS, FUN = read_pin)
-
-ffs = unlist(lapply(pins, FUN = function(pin){
-    ff = FF(periodogram(pin, width = PERIODOGRAM_WINDOW))
-    ff = ff[! is.na(ff) & ff > 400 & ff < 1700]
-    quantile(ff, 0.85)
-}));
-
-PLOT = FALSE
-if (PLOT) {
-    plot(ffs);
-    lines(c(1, length(ffs)), ffs[c(1, length(ffs))]);
-}
-
-# wave = Reduce(bind, c(pins, rev(pins)))
 wave = readMP3('../../resources/mp3/twinkle.mp3');
-compute_ff_dat = function(){
-    period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
-    ff = FF(period)
+# wave = mono(readMP3('../../resources/mp3/mary.mp3'));
+SAMPLE_RATE = wave@samp.rate
+NOTE_DURATION_SAMPLES = round(NOTE_DURATION_MILLIS / 1000 * SAMPLE_RATE)
+SAMPLES = length(wave@left)
 
-    ff_mask = ! is.na(ff);
-    ff_avail = ff[ff_mask]
-    dendogram = hclust(dist(ff_avail), method = 'centroid')
-    ff_clusters = rep(NA, length(ff));
-    ff_clusters[ff_mask] = cutree(dendogram, h = CUTREE_HEIGHT)
-    ff_dat = data.frame(raw = ff, cluster = ff_clusters)
+## todo: review, consider alternatives. Taking periodogram of an arbitrary window size.
+## There is some inherent precission loss when taking these windows.
+period = (periodogram(wave, width = PERIODOGRAM_WINDOW));
+PERIODS = length(period@energy)
 
-    ff_cent_agg = aggregate(formula = raw ~ cluster, data = ff_dat, FUN = median)
-    ff_centroids = ff_cent_agg[order(ff_cent_agg$cluster), 2]
-    ff_dat$centroid = round(ff_centroids[ff_dat$cluster])
+compute_peaks = function(){
+    deltas = diff(period@energy)
+    ## todo: review: using an arbitrary threshold of percentile 85
+    threshold = qnorm(p = 0.85, mean = mean(deltas), sd = sd(deltas))
+    peaks = which(deltas > threshold);
+    ## todo: review: cleaning false peaks base on min inter-peak distance
+    peaks = peaks[- (which(diff(peaks) < MIN_PEAK_SEP_PERIODS) + 1)];
 
+    ## plot deltas
+    plot_deltas = function() {
+        plot(deltas, type = 'l')
+        abline(h = threshold, col = 2)
+    };
+    # plot_deltas();
 
-    ## smooth the centroids vector and detect the frequencies
-    cent = ff_dat$centroid
-    cent[is.na(cent)] = SILENCE_FREQ
-    ff_dat$centroid = cent;
-    #cent = runmed(cent, k = 9)
-    ## note this algorithm does not support multiple concurrent notes
-    ## todo: support concurrent/multi-channel detection and translation to music-box format
-    from = 1
-    prev_freq = median(cent[1 : MIN_NOTE_PERIODS])
-    for (i in 2 : (length(cent) + 1)) {
-        if (! identical(cent[i], cent[i - 1])) {
-            if (i - from >= MIN_NOTE_PERIODS) {
-                prev_freq = cent[i - 1]
-            } else {
-                cent[from : (i - 1)] = prev_freq;
-            }
-            from = i;
-        }
-    }
-    ff_dat$clean = cent;
+    ## plot peaks
+    plot_peaks = function() {
+        plot(wave, main = "Wave peaks detection")
+        abline(v = peaks * PERIODOGRAM_WINDOW / SAMPLE_RATE, col = 2)
+        legend(legend = c("wave", "peaks"), x = "bottomright", col = 1 : 2, pch = 16)
+    };
+    # plot_peaks();
 
-    ff_dat
-}
-ff_dat = compute_ff_dat();
+    peaks;
+};
+peaks = compute_peaks();
 
-PLOT = FALSE
-if (PLOT) {
-    plot(ff_dat$centroid, pch = 16, col = ff_dat$cluster)
-    lines(ff_dat$raw)
-}
+compute_notes = function() {
+    ## detect frequencies
+    ffs = FF(period)
 
-generate_music_box_output = function(){
-    cent = ff_dat$clean
-    # compute notes
-    diff_ind = which(diff(cent) != 0)
-    from = c(1, diff_ind + 1)
-    to = c(diff_ind, length(cent))
-    notes = data.frame(from = from, to = to, freq = cent[from])
-
-    # compute music box pins
-    # mask = notes$freq > SILENCE_FREQ
-    mask = notes$freq > 80
-    freq = notes$freq[mask]
-    rang = range(freq)
-    pin = rep(- 1, nrow(notes))
-    pin[mask] = round((freq - rang[1]) / (rang[2] - rang[1]) * (PINS - 1))
-    notes$pin = pin
-
-    # generate music box output
-    sink('../../songs/twinkle.mbx');
-    delay = 0 # in periods
-    for (i in 1 : nrow(notes)) {
-        r = notes[i,]
-        duration = r$to - r$from # in periods
-        if (r$pin >= 0) {
-            cat(sprintf("%d:%d\n", delay * PERIOD_TO_MB_DELAY, r$pin));
-            beats = floor(duration / PIN_DURATION_PERIODS);
-            delay = duration;
-            if (beats > 1) {
-                ## a single pin was not enough, repeat the same pin beats - 1 times
-                for (k in 1 : (beats - 1)) {
-                    cat(sprintf("%d:%d\n", round(PIN_DURATION_PERIODS * PERIOD_TO_MB_DELAY), r$pin))
-                }
-                # update the delay, subtracting the additional pin periods
-                delay = round(delay - (beats - 1) * PIN_DURATION_PERIODS);
-            }
-        } else {
-            # this is a silent note
-            delay = delay + duration;
-        }
-    }
-    sink(NULL);
-
-
-    notes
-}
-notes = generate_music_box_output();
-
-
-PLOT = TRUE
-if (PLOT) {
-    plot(ff_dat$centroid, pch = 16, col = ff_dat$cluster)
-    lines(ff_dat$clean)
-}
-
-## make resulting wave
-GO = TRUE
-if (GO) {
-    sines = apply(notes, MARGIN = 1, FUN = function(ro){
-        freq = ro['freq']
-        duration = (ro['to'] - ro['from']) * PERIODOGRAM_WINDOW
-        if (freq > SILENCE_FREQ) {
-            sine(freq = freq, duration = duration)
-        } else {
-            names(duration) = NULL # bug in tuneR code
-            silence(duration = duration)
-        }
+    from_period = peaks + 1
+    to_period = c(peaks[- 1], PERIODS)
+    freqs = mapply(from = from_period, to = to_period, function(from, to){
+        # todo: refine, consider alternatives. just an initial approach: getting the median of the fundamental frequencies
+        freq = median(ffs[from : to], na.rm = TRUE)
     });
-    res = Reduce(bind, sines)
-    # writeWave(res, "output.wav")
+    sample_peaks = peaks * PERIODOGRAM_WINDOW # in samples
+    data.frame(offset = sample_peaks, freq = freqs)
+};
+notes = compute_notes();
 
-    # play result
-    player = NULL
-
-    if (Sys.info()[["sysname"]] == "Darwin") {
-    	player = "afplay"
+## generate resulting wave
+res_samples = rep(SILENCE_FREQ, length(wave@left))
+for (i in 1 : nrow(notes)) {
+    ro = notes[i,];
+    freq = ro$freq;
+    if (! is.na(freq) && freq > SILENCE_FREQ) {
+        offset = ro$offset;
+        duration = NOTE_DURATION_SAMPLES;
+        mask = offset + 1 : duration;
+        amplitude = exp(- seq(from = 0, to = 5, length = duration))
+        ## todo: review initial approach: using an exponential decay amplitude with arbitrary (constant) duration
+        res_samples[mask] = res_samples[mask] + amplitude * sine(freq = freq, duration = duration, samp.rate = SAMPLE_RATE)@left;
     }
-    play(res, player)
 }
+
+res_wave = normalize(Wave(left = res_samples, samp.rate = SAMPLE_RATE, bit = 32, pcm = FALSE))
+
+# play result
+player = NULL
+
+if (Sys.info()[["sysname"]] == "Darwin") {
+    player = "afplay"
+}
+play(res_wave, player)
+# writeWave(res_wave, filename = '../../target/res.wav')
+# writeWave(wave, filename = '../../target/orig.wav')
