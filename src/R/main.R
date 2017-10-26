@@ -81,7 +81,13 @@ for (i in 1 : nrow(notes)) {
 }
 
 res_wave = normalize(Wave(left = res_samples, samp.rate = SAMPLE_RATE, bit = 32, pcm = FALSE))
-play(res_wave)
+
+# play result
+player = NULL
+
+if (Sys.info()[["sysname"]] == "Darwin") {
+    player = "afplay"
+}
+play(res_wave, player)
 # writeWave(res_wave, filename = '../../target/res.wav')
 # writeWave(wave, filename = '../../target/orig.wav')
-
